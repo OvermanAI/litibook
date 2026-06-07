@@ -1,0 +1,23 @@
+{
+  "imagePath": "image-targets/litibook_luminance.png",
+  "metadata": null,
+  "name": "litibook",
+  "type": "PLANAR",
+  "properties": {
+    "left": 93,
+    "top": 0,
+    "width": 997,
+    "height": 1329,
+    "isRotated": true,
+    "originalWidth": 1183,
+    "originalHeight": 1329
+  },
+  "resources": {
+    "originalImage": "litibook_original.png",
+    "croppedImage": "litibook_cropped.png",
+    "thumbnailImage": "litibook_thumbnail.png",
+    "luminanceImage": "litibook_luminance.png"
+  },
+  "created": 1780823548416,
+  "updated": 1780823548416
+}
