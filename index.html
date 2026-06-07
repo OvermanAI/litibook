@@ -3,534 +3,317 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
-  <title>LitiAR</title>
-  <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.2/dist/mindar-image-aframe.prod.js"></script>
-  <style>
-    * { margin:0; padding:0; box-sizing:border-box; }
-    body { background:#000; overflow:hidden; font-family:-apple-system,sans-serif; }
-    #hint {
-      position:fixed; bottom:48px; left:50%; transform:translateX(-50%);
-      background:rgba(0,0,0,0.55); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);
-      color:#fff; padding:12px 24px; border-radius:999px; font-size:15px; font-weight:500;
-      display:flex; align-items:center; gap:8px; z-index:9999; pointer-events:none;
-      transition:opacity 0.6s ease;
-    }
-    #hint.hidden { opacity:0; }
-    #drag-hint {
-      position:fixed; top:60px; left:50%; transform:translateX(-50%);
-      background:rgba(255,210,0,0.9); color:#000;
-      padding:8px 20px; border-radius:999px; font-size:13px; font-weight:700;
-      z-index:9999; pointer-events:none;
-      opacity:0; transition:opacity 0.4s ease;
-    }
-    #drag-hint.show { opacity:1; }
-    .dot { width:8px;height:8px;border-radius:50%;background:#fff;animation:p 1.4s ease-in-out infinite; }
-    @keyframes p { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.7)} }
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <title>LitiBook — 繪本活起來了</title>
 
-    /* 閱讀按鈕 */
-    #read-btn {
+  <!-- 8th Wall Engine (取代 MindAR) -->
+  <script src="./8frame.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@8thwall/engine-binary@1/dist/xr.js" async crossorigin="anonymous" data-preload-chunks="slam"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@8thwall/landing-page@1/dist/landing-page.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@8thwall/xrextras@1/dist/xrextras.js" crossorigin="anonymous"></script>
+
+  <!-- Image Target 資料（在 XR8 載入前備妥） -->
+  <script>
+    const LITIBOOK_TARGET = {
+      "imagePath": "image-targets/litibook_luminance.png",
+      "metadata": null,
+      "name": "litibook",
+      "type": "PLANAR",
+      "properties": {
+        "left": 93, "top": 0, "width": 997, "height": 1329,
+        "isRotated": true, "originalWidth": 1183, "originalHeight": 1329
+      },
+      "resources": {
+        "originalImage": "litibook_original.png",
+        "croppedImage": "litibook_cropped.png",
+        "thumbnailImage": "litibook_thumbnail.png",
+        "luminanceImage": "litibook_luminance.png"
+      },
+      "created": 1780823548416,
+      "updated": 1780823548416
+    };
+
+    const onxrloaded = () => {
+      XR8.XrController.configure({ imageTargetData: [LITIBOOK_TARGET] });
+    };
+    window.XR8 ? onxrloaded() : window.addEventListener('xrloaded', onxrloaded);
+  </script>
+
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #000; overflow: hidden; font-family: -apple-system, sans-serif; }
+
+    #hint {
       position: fixed;
       bottom: 48px;
-      right: 24px;
-      z-index: 9999;
-      background: linear-gradient(135deg, #FFD700, #FFA500);
-      color: #3a2000;
-      border: none;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.55);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      color: #fff;
+      padding: 12px 24px;
       border-radius: 999px;
-      padding: 14px 22px;
       font-size: 15px;
-      font-weight: 700;
-      font-family: -apple-system, sans-serif;
+      font-weight: 500;
       display: flex;
       align-items: center;
       gap: 8px;
-      cursor: pointer;
-      box-shadow: 0 4px 20px rgba(255,165,0,0.5);
-      transition: transform 0.15s ease, box-shadow 0.15s ease;
-      -webkit-tap-highlight-color: transparent;
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.5s ease, transform 0.15s ease;
-    }
-    #read-btn.visible { opacity: 1; pointer-events: auto; }
-    #read-btn:active  { transform: scale(0.94); }
-    #read-btn.reading {
-      background: linear-gradient(135deg, #ff6b6b, #ee5a24);
-      color: #fff;
-      box-shadow: 0 4px 20px rgba(238,90,36,0.5);
-    }
-
-    /* 聲波動畫（閱讀中顯示） */
-    .sound-bars { display:flex; align-items:center; gap:2px; height:16px; }
-    .sound-bars span {
-      display:block; width:3px; background:currentColor; border-radius:2px;
-      animation:bar 0.8s ease-in-out infinite;
-    }
-    .sound-bars span:nth-child(1){height:6px;  animation-delay:0s}
-    .sound-bars span:nth-child(2){height:12px; animation-delay:0.15s}
-    .sound-bars span:nth-child(3){height:16px; animation-delay:0.3s}
-    .sound-bars span:nth-child(4){height:10px; animation-delay:0.45s}
-    .sound-bars span:nth-child(5){height:6px;  animation-delay:0.6s}
-    @keyframes bar {
-      0%,100%{transform:scaleY(0.4)} 50%{transform:scaleY(1)}
-    }
-
-    /* 字幕條 */
-    #subtitle {
-      position: fixed;
-      bottom: 120px;
-      left: 50%;
-      transform: translateX(-50%);
-      max-width: 88vw;
-      background: rgba(0,0,0,0.72);
-      backdrop-filter: blur(10px);
-      -webkit-backdrop-filter: blur(10px);
-      color: #FFF8DC;
-      padding: 10px 18px;
-      border-radius: 12px;
-      font-size: 14px;
-      line-height: 1.5;
-      text-align: center;
       z-index: 9999;
       pointer-events: none;
-      opacity: 0;
-      transition: opacity 0.3s ease;
+      transition: opacity 0.6s ease;
     }
-    #subtitle.show { opacity: 1; }
+    #hint.hidden { opacity: 0; }
+    .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #fff;
+      animation: pulse 1.4s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%       { opacity: 0.4; transform: scale(0.7); }
+    }
+
+    #detected-flash {
+      position: fixed; inset: 0;
+      background: radial-gradient(circle, rgba(255,220,100,0.3) 0%, transparent 70%);
+      pointer-events: none;
+      z-index: 9998;
+      opacity: 0;
+      transition: opacity 0.4s ease;
+    }
+    #detected-flash.show { opacity: 1; }
   </style>
 </head>
 <body>
-  <div id="hint"><div class="dot"></div>將相機對準 LitiBook 繪本頁面</div>
-  <div id="drag-hint">✋ 可拖曳任何浮動元素</div>
 
-  <!-- 閱讀按鈕 -->
-  <button id="read-btn" aria-label="朗讀本頁英文">
-    <span id="btn-icon">🔊</span>
-    <span id="btn-label">閱讀</span>
-  </button>
+  <div id="hint">
+    <div class="dot"></div>
+    將相機對準 LitiBook 繪本頁面
+  </div>
 
-  <!-- 字幕 -->
-  <div id="subtitle"></div>
+  <div id="detected-flash"></div>
 
+  <!-- ============================================================
+       8th Wall AR 場景
+       xrweb: 停用世界追蹤，只用 Image Target 模式
+  ============================================================ -->
   <a-scene
-    drag-system
-    mindar-image="imageTargetSrc:./litibook.mind;autoStart:true;uiLoading:yes;uiScanning:yes;uiError:yes;filterMinCF:0.001;filterBeta:10;"
-    color-space="sRGB" renderer="colorManagement:true;antialias:true;"
-    vr-mode-ui="enabled:false" device-orientation-permission-ui="enabled:false">
+    xrextras-gesture-detector
+    landing-page
+    xrextras-loading
+    xrextras-runtime-error
+    renderer="colorManagement: true; physicallyCorrectLights: true; antialias: true;"
+    vr-mode-ui="enabled: false"
+    device-orientation-permission-ui="enabled: false"
+    xrweb="disableWorldTracking: true">
 
     <a-assets>
-      <img id="yu-img"  src="./yu.png"                crossorigin="anonymous"/>
-      <img id="text-tr" src="./text_top_right.png"    crossorigin="anonymous"/>
-      <img id="text-bl" src="./text_bottom_left.png"  crossorigin="anonymous"/>
-      <img id="text-br" src="./text_bottom_right.png" crossorigin="anonymous"/>
+      <!-- 未來在這裡加入 GLB 模型 -->
+      <!-- <a-asset-item id="character-glb" src="./character.glb"></a-asset-item> -->
     </a-assets>
 
-    <a-camera position="0 0 0" look-controls="enabled:false" fov="80"></a-camera>
+    <a-camera position="0 0 0" look-controls="enabled: false" fov="80"></a-camera>
 
-    <a-entity id="book-anchor" mindar-image-target="targetIndex:0">
+    <a-light type="directional" intensity="0.8" position="1 2 1"></a-light>
+    <a-light type="ambient" color="#B0C8FF" intensity="0.4"></a-light>
+
+    <!-- ============================================================
+         Image Target 錨點（取代 mindar-image-target）
+         name: 必須對應 LITIBOOK_TARGET.name = "litibook"
+    ============================================================ -->
+    <xrextras-named-image-target name="litibook" id="book-anchor">
 
       <!--
-        ★ 可拖曳元素的結構：
-           <a-entity class="draggable"
-                     data-float-amp="0.03"    ← 浮動幅度（AR 單位）
-                     data-float-dur="2200"    ← 浮動週期（ms）
-                     position="...">
-             [子元素：圖片 / 魔法陣 / 任意內容]
-           </a-entity>
-
-        這樣未來加任何新元素，只要加上 class="draggable"
-        就自動可以拖曳，不需要再寫任何 JS。
+        座標說明（圖片 1329×1183，比例 1.1234）：
+        X: -0.5（左緣）→ 0.5（右緣）
+        Y: -0.445（底部）→ 0.445（頂部）
+        Z: 0（書頁表面）→ 正值（朝向觀看者浮起）
       -->
 
-      <!-- 🧒 YU 角色 -->
-      <a-entity class="draggable"
-                data-float-amp="0.030" data-float-dur="2200"
-                position="0.03 -0.04 0.025">
-        <a-image src="#yu-img" width="0.22" height="0.38"
-          material="transparent:true;alphaTest:0.18;side:double"
-          animation__breathe="property:scale;from:1 1 1;to:1.03 1.03 1.03;dur:3000;easing:easeInOutSine;loop:true;dir:alternate">
-        </a-image>
-        <!-- 魔法陣：作為 YU 的子元素，拖曳時自動跟著移動 -->
-        <a-entity position="0 -0.18 -0.017">
-          <a-torus radius="0.065" radius-tubular="0.004"
-            color="#FFD700" emissive="#FFD700" emissive-intensity="0.95" metalness="0" roughness="1" opacity="0.85"
-            animation="property:rotation;from:0 0 0;to:0 0 360;dur:5000;loop:true;easing:linear"></a-torus>
-          <a-torus radius="0.044" radius-tubular="0.003"
-            color="#FFA500" emissive="#FFA500" emissive-intensity="0.9" metalness="0" roughness="1" opacity="0.75"
-            animation="property:rotation;from:0 0 360;to:0 0 0;dur:3500;loop:true;easing:linear"></a-torus>
-          <a-circle radius="0.068" rotation="-90 0 0"
-            color="#FFD700" emissive="#FFD700" emissive-intensity="0.4" metalness="0" roughness="1" opacity="0.18"
-            material="transparent:true;side:double"
-            animation="property:scale;from:0.88 0.88 0.88;to:1.12 1.12 1.12;dur:2500;easing:easeInOutSine;loop:true;dir:alternate">
-          </a-circle>
-        </a-entity>
+      <!-- ==============================
+           GLB 3D 角色（主角）
+           有了 GLB 之後，取消下面的註解並提供檔案
+      ============================== -->
+      <!--
+      <a-entity
+        gltf-model="#character-glb"
+        position="0.04 0.05 0.08"
+        scale="0.25 0.25 0.25"
+        xrextras-one-finger-rotate
+        animation="property: position; from: 0.04 0.05 0.08; to: 0.04 0.08 0.08; dur: 2800; easing: easeInOutSine; loop: true; dir: alternate">
+      </a-entity>
+      -->
+
+      <!-- ==============================
+           🌟 星星群（14顆）
+      ============================== -->
+      <a-sphere position="-0.35 0.35 0.08" radius="0.018" color="#FFE566" emissive="#FFE200" emissive-intensity="1" metalness="0" roughness="1"
+        animation="property: position; from: -0.35 0.35 0.08; to: -0.35 0.38 0.08; dur: 1600; easing: easeInOutSine; loop: true; dir: alternate"></a-sphere>
+
+      <a-sphere position="-0.18 0.40 0.10" radius="0.014" color="#FFF4A0" emissive="#FFE200" emissive-intensity="1" metalness="0" roughness="1"
+        animation="property: position; from: -0.18 0.40 0.10; to: -0.18 0.43 0.10; dur: 2100; easing: easeInOutSine; loop: true; dir: alternate"></a-sphere>
+
+      <a-sphere position="-0.42 0.20 0.07" radius="0.012" color="#FFD700" emissive="#FFE200" emissive-intensity="1" metalness="0" roughness="1"
+        animation="property: position; from: -0.42 0.20 0.07; to: -0.42 0.225 0.07; dur: 1900; easing: easeInOutSine; loop: true; dir: alternate"></a-sphere>
+
+      <a-sphere position="0.02 0.42 0.12" radius="0.020" color="#FFFACD" emissive="#FFE200" emissive-intensity="1" metalness="0" roughness="1"
+        animation="property: position; from: 0.02 0.42 0.12; to: 0.02 0.44 0.12; dur: 1400; easing: easeInOutSine; loop: true; dir: alternate"></a-sphere>
+
+      <a-sphere position="0.10 0.36 0.09" radius="0.013" color="#FFE566" emissive="#FFE200" emissive-intensity="1" metalness="0" roughness="1"
+        animation="property: position; from: 0.10 0.36 0.09; to: 0.10 0.385 0.09; dur: 2300; easing: easeInOutSine; loop: true; dir: alternate"></a-sphere>
+
+      <a-sphere position="-0.08 0.30 0.11" radius="0.015" color="#FFF4A0" emissive="#FFE200" emissive-intensity="1" metalness="0" roughness="1"
+        animation="property: position; from: -0.08 0.30 0.11; to: -0.08 0.325 0.11; dur: 1750; easing: easeInOutSine; loop: true; dir: alternate"></a-sphere>
+
+      <a-sphere position="0.30 0.40 0.10" radius="0.016" color="#FFEAA7" emissive="#FFE200" emissive-intensity="1" metalness="0" roughness="1"
+        animation="property: position; from: 0.30 0.40 0.10; to: 0.30 0.425 0.10; dur: 2000; easing: easeInOutSine; loop: true; dir: alternate"></a-sphere>
+
+      <a-sphere position="0.42 0.30 0.08" radius="0.012" color="#FFD700" emissive="#FFE200" emissive-intensity="1" metalness="0" roughness="1"
+        animation="property: position; from: 0.42 0.30 0.08; to: 0.42 0.325 0.08; dur: 1500; easing: easeInOutSine; loop: true; dir: alternate"></a-sphere>
+
+      <a-sphere position="0.38 0.10 0.07" radius="0.014" color="#FFF4A0" emissive="#FFE200" emissive-intensity="1" metalness="0" roughness="1"
+        animation="property: position; from: 0.38 0.10 0.07; to: 0.38 0.125 0.07; dur: 2200; easing: easeInOutSine; loop: true; dir: alternate"></a-sphere>
+
+      <a-sphere position="-0.28 0.12 0.09" radius="0.010" color="#FFE566" emissive="#FFE200" emissive-intensity="1" metalness="0" roughness="1"
+        animation="property: position; from: -0.28 0.12 0.09; to: -0.28 0.14 0.09; dur: 1300; easing: easeInOutSine; loop: true; dir: alternate"></a-sphere>
+
+      <a-sphere position="0.22 0.20 0.06" radius="0.011" color="#FFFACD" emissive="#FFE200" emissive-intensity="1" metalness="0" roughness="1"
+        animation="property: position; from: 0.22 0.20 0.06; to: 0.22 0.225 0.06; dur: 1850; easing: easeInOutSine; loop: true; dir: alternate"></a-sphere>
+
+      <a-sphere position="-0.10 0.18 0.10" radius="0.009" color="#FFD700" emissive="#FFE200" emissive-intensity="1" metalness="0" roughness="1"
+        animation="property: position; from: -0.10 0.18 0.10; to: -0.10 0.205 0.10; dur: 2400; easing: easeInOutSine; loop: true; dir: alternate"></a-sphere>
+
+      <a-sphere position="0.15 0.44 0.13" radius="0.017" color="#FFEAA7" emissive="#FFE200" emissive-intensity="1" metalness="0" roughness="1"
+        animation="property: position; from: 0.15 0.44 0.13; to: 0.15 0.46 0.13; dur: 1650; easing: easeInOutSine; loop: true; dir: alternate"></a-sphere>
+
+      <a-sphere position="-0.45 0.38 0.06" radius="0.010" color="#FFE566" emissive="#FFE200" emissive-intensity="1" metalness="0" roughness="1"
+        animation="property: position; from: -0.45 0.38 0.06; to: -0.45 0.40 0.06; dur: 2000; easing: easeInOutSine; loop: true; dir: alternate"></a-sphere>
+
+      <!-- ==============================
+           🌙 月亮（右上方）
+      ============================== -->
+      <a-entity position="0.22 0.32 0.10"
+        animation__float="property: position; from: 0.22 0.32 0.10; to: 0.22 0.34 0.10; dur: 3500; easing: easeInOutSine; loop: true; dir: alternate"
+        animation__spin="property: rotation; from: 0 0 0; to: 0 360 0; dur: 18000; loop: true; easing: linear">
+        <a-sphere radius="0.048" color="#FFF3B0" emissive="#FFD700" emissive-intensity="0.3" metalness="0" roughness="0.8"></a-sphere>
+        <a-sphere position="-0.022 0.008 0.022" radius="0.042" color="#0D0D2B" opacity="0.92"></a-sphere>
       </a-entity>
 
-      <!-- 📜 右上文字面板 -->
-      <a-entity class="draggable"
-                data-float-amp="0.025" data-float-dur="2800"
-                position="0.30 0.22 0.038">
-        <a-image src="#text-tr" width="0.37" height="0.20"
-          material="transparent:true;alphaTest:0.18;side:double"
-          animation__sway="property:rotation;from:0 0 -1.5;to:0 0 1.5;dur:4500;easing:easeInOutSine;loop:true;dir:alternate">
-        </a-image>
+      <!-- ==============================
+           ☁️ 雲朵（4 朵）
+      ============================== -->
+      <a-entity position="-0.32 0.28 0.07"
+        animation="property: position; from: -0.32 0.28 0.07; to: -0.28 0.28 0.07; dur: 4000; easing: easeInOutSine; loop: true; dir: alternate">
+        <a-sphere position="0 0 0"         radius="0.040" color="#FFFFFF" opacity="0.72" roughness="1" metalness="0"></a-sphere>
+        <a-sphere position="0.038 0.01 0"  radius="0.032" color="#FFFFFF" opacity="0.72" roughness="1" metalness="0"></a-sphere>
+        <a-sphere position="-0.030 0.01 0" radius="0.030" color="#FFFFFF" opacity="0.72" roughness="1" metalness="0"></a-sphere>
+        <a-sphere position="0.015 0.025 0" radius="0.025" color="#FFFFFF" opacity="0.72" roughness="1" metalness="0"></a-sphere>
       </a-entity>
 
-      <!-- 📜 左下文字面板 -->
-      <a-entity class="draggable"
-                data-float-amp="0.025" data-float-dur="3200"
-                position="-0.37 -0.16 0.038">
-        <a-image src="#text-bl" width="0.24" height="0.22"
-          material="transparent:true;alphaTest:0.18;side:double"
-          animation__sway="property:rotation;from:0 0 1.2;to:0 0 -1.2;dur:5000;easing:easeInOutSine;loop:true;dir:alternate">
-        </a-image>
+      <a-entity position="0.05 0.38 0.09"
+        animation="property: position; from: 0.05 0.38 0.09; to: 0.09 0.38 0.09; dur: 5200; easing: easeInOutSine; loop: true; dir: alternate">
+        <a-sphere position="0 0 0"          radius="0.035" color="#E8F4FF" opacity="0.65" roughness="1" metalness="0"></a-sphere>
+        <a-sphere position="0.032 0.008 0"  radius="0.028" color="#E8F4FF" opacity="0.65" roughness="1" metalness="0"></a-sphere>
+        <a-sphere position="-0.028 0.006 0" radius="0.026" color="#E8F4FF" opacity="0.65" roughness="1" metalness="0"></a-sphere>
+        <a-sphere position="0.010 0.022 0"  radius="0.022" color="#E8F4FF" opacity="0.65" roughness="1" metalness="0"></a-sphere>
       </a-entity>
 
-      <!-- 📜 右下文字面板 -->
-      <a-entity class="draggable"
-                data-float-amp="0.025" data-float-dur="3600"
-                position="0.30 -0.32 0.038">
-        <a-image src="#text-br" width="0.36" height="0.21"
-          material="transparent:true;alphaTest:0.18;side:double"
-          animation__sway="property:rotation;from:0 0 -1.0;to:0 0 1.0;dur:5500;easing:easeInOutSine;loop:true;dir:alternate">
-        </a-image>
+      <a-entity position="0.35 0.25 0.06"
+        animation="property: position; from: 0.35 0.25 0.06; to: 0.31 0.25 0.06; dur: 4800; easing: easeInOutSine; loop: true; dir: alternate">
+        <a-sphere position="0 0 0"          radius="0.038" color="#FFFFFF" opacity="0.60" roughness="1" metalness="0"></a-sphere>
+        <a-sphere position="0.034 0.01 0"   radius="0.030" color="#FFFFFF" opacity="0.60" roughness="1" metalness="0"></a-sphere>
+        <a-sphere position="-0.026 0.01 0"  radius="0.028" color="#FFFFFF" opacity="0.60" roughness="1" metalness="0"></a-sphere>
       </a-entity>
 
-      <!-- ⭐ 星星 -->
-      <a-sphere position="-0.35 0.35 0.06" radius="0.020" color="#FFE200" emissive="#FFE200" emissive-intensity="1" metalness="0" roughness="1" animation="property:position;from:-0.35 0.35 0.06;to:-0.35 0.375 0.06;dur:1600;easing:easeInOutSine;loop:true;dir:alternate"></a-sphere>
-      <a-sphere position="-0.18 0.40 0.08" radius="0.016" color="#FFF4A0" emissive="#FFF4A0" emissive-intensity="1" metalness="0" roughness="1" animation="property:position;from:-0.18 0.40 0.08;to:-0.18 0.425 0.08;dur:2100;easing:easeInOutSine;loop:true;dir:alternate"></a-sphere>
-      <a-sphere position="-0.42 0.22 0.05" radius="0.014" color="#FFD700" emissive="#FFD700" emissive-intensity="1" metalness="0" roughness="1" animation="property:position;from:-0.42 0.22 0.05;to:-0.42 0.245 0.05;dur:1900;easing:easeInOutSine;loop:true;dir:alternate"></a-sphere>
-      <a-sphere position="0.02 0.42 0.10"  radius="0.022" color="#FFFACD" emissive="#FFFACD" emissive-intensity="1" metalness="0" roughness="1" animation="property:position;from:0.02 0.42 0.10;to:0.02 0.445 0.10;dur:1400;easing:easeInOutSine;loop:true;dir:alternate"></a-sphere>
-      <a-sphere position="0.10 0.36 0.07"  radius="0.015" color="#FFE200" emissive="#FFE200" emissive-intensity="1" metalness="0" roughness="1" animation="property:position;from:0.10 0.36 0.07;to:0.10 0.385 0.07;dur:2300;easing:easeInOutSine;loop:true;dir:alternate"></a-sphere>
-      <a-sphere position="-0.08 0.30 0.09" radius="0.017" color="#FFF4A0" emissive="#FFF4A0" emissive-intensity="1" metalness="0" roughness="1" animation="property:position;from:-0.08 0.30 0.09;to:-0.08 0.325 0.09;dur:1750;easing:easeInOutSine;loop:true;dir:alternate"></a-sphere>
-      <a-sphere position="0.30 0.40 0.08"  radius="0.018" color="#FFEAA7" emissive="#FFEAA7" emissive-intensity="1" metalness="0" roughness="1" animation="property:position;from:0.30 0.40 0.08;to:0.30 0.425 0.08;dur:2000;easing:easeInOutSine;loop:true;dir:alternate"></a-sphere>
-      <a-sphere position="0.42 0.30 0.06"  radius="0.013" color="#FFD700" emissive="#FFD700" emissive-intensity="1" metalness="0" roughness="1" animation="property:position;from:0.42 0.30 0.06;to:0.42 0.325 0.06;dur:1500;easing:easeInOutSine;loop:true;dir:alternate"></a-sphere>
-      <a-sphere position="0.38 0.12 0.05"  radius="0.015" color="#FFF4A0" emissive="#FFF4A0" emissive-intensity="1" metalness="0" roughness="1" animation="property:position;from:0.38 0.12 0.05;to:0.38 0.145 0.05;dur:2200;easing:easeInOutSine;loop:true;dir:alternate"></a-sphere>
-      <a-sphere position="-0.28 0.14 0.07" radius="0.012" color="#FFE200" emissive="#FFE200" emissive-intensity="1" metalness="0" roughness="1" animation="property:position;from:-0.28 0.14 0.07;to:-0.28 0.165 0.07;dur:1300;easing:easeInOutSine;loop:true;dir:alternate"></a-sphere>
-      <a-sphere position="0.22 0.22 0.05"  radius="0.013" color="#FFFACD" emissive="#FFFACD" emissive-intensity="1" metalness="0" roughness="1" animation="property:position;from:0.22 0.22 0.05;to:0.22 0.245 0.05;dur:1850;easing:easeInOutSine;loop:true;dir:alternate"></a-sphere>
-      <a-sphere position="-0.10 0.20 0.08" radius="0.011" color="#FFD700" emissive="#FFD700" emissive-intensity="1" metalness="0" roughness="1" animation="property:position;from:-0.10 0.20 0.08;to:-0.10 0.225 0.08;dur:2400;easing:easeInOutSine;loop:true;dir:alternate"></a-sphere>
-      <a-sphere position="0.15 0.44 0.11"  radius="0.019" color="#FFEAA7" emissive="#FFEAA7" emissive-intensity="1" metalness="0" roughness="1" animation="property:position;from:0.15 0.44 0.11;to:0.15 0.465 0.11;dur:1650;easing:easeInOutSine;loop:true;dir:alternate"></a-sphere>
-      <a-sphere position="-0.45 0.38 0.05" radius="0.012" color="#FFE200" emissive="#FFE200" emissive-intensity="1" metalness="0" roughness="1" animation="property:position;from:-0.45 0.38 0.05;to:-0.45 0.405 0.05;dur:2000;easing:easeInOutSine;loop:true;dir:alternate"></a-sphere>
-
-      <!-- 🌙 月亮 -->
-      <a-entity position="0.22 0.32 0.08"
-        animation__float="property:position;from:0.22 0.32 0.08;to:0.22 0.345 0.08;dur:4000;easing:easeInOutSine;loop:true;dir:alternate"
-        animation__rock="property:rotation;from:0 0 -4;to:0 0 4;dur:7000;easing:easeInOutSine;loop:true;dir:alternate">
-        <a-sphere radius="0.050" color="#FFF8DC" emissive="#FFF8DC" emissive-intensity="0.85" metalness="0" roughness="1">
-          <a-sphere radius="1.45" color="#FFFACD" emissive="#FFFACD" emissive-intensity="0.15" metalness="0" roughness="1" opacity="0.22" material="transparent:true;side:back"></a-sphere>
-        </a-sphere>
-        <!-- 新月暗面移除：難以精準定位，純發光球效果更乾淨 -->
+      <a-entity position="-0.40 0.10 0.08"
+        animation="property: position; from: -0.40 0.10 0.08; to: -0.36 0.10 0.08; dur: 6000; easing: easeInOutSine; loop: true; dir: alternate">
+        <a-sphere position="0 0 0"          radius="0.032" color="#F0F8FF" opacity="0.55" roughness="1" metalness="0"></a-sphere>
+        <a-sphere position="0.028 0.008 0"  radius="0.025" color="#F0F8FF" opacity="0.55" roughness="1" metalness="0"></a-sphere>
+        <a-sphere position="-0.022 0.006 0" radius="0.023" color="#F0F8FF" opacity="0.55" roughness="1" metalness="0"></a-sphere>
       </a-entity>
 
-      <!-- ☁️ 雲朵 -->
-      <a-entity position="-0.30 0.27 0.04" animation="property:position;from:-0.30 0.27 0.04;to:-0.26 0.27 0.04;dur:5000;easing:easeInOutSine;loop:true;dir:alternate">
-        <a-sphere position="0 0 0"          radius="0.028" color="#FFFFFF" emissive="#FFFFFF" emissive-intensity="0.4" metalness="0" roughness="1" opacity="0.55"></a-sphere>
-        <a-sphere position="0.026 0.008 0"  radius="0.022" color="#FFFFFF" emissive="#FFFFFF" emissive-intensity="0.4" metalness="0" roughness="1" opacity="0.50"></a-sphere>
-        <a-sphere position="-0.020 0.006 0" radius="0.020" color="#FFFFFF" emissive="#FFFFFF" emissive-intensity="0.4" metalness="0" roughness="1" opacity="0.45"></a-sphere>
-      </a-entity>
-      <a-entity position="0.06 0.37 0.06" animation="property:position;from:0.06 0.37 0.06;to:0.10 0.37 0.06;dur:6500;easing:easeInOutSine;loop:true;dir:alternate">
-        <a-sphere position="0 0 0"          radius="0.025" color="#E8F4FF" emissive="#E8F4FF" emissive-intensity="0.3" metalness="0" roughness="1" opacity="0.50"></a-sphere>
-        <a-sphere position="0.022 0.007 0"  radius="0.020" color="#E8F4FF" emissive="#E8F4FF" emissive-intensity="0.3" metalness="0" roughness="1" opacity="0.45"></a-sphere>
-      </a-entity>
-      <a-entity position="0.34 0.24 0.04" animation="property:position;from:0.34 0.24 0.04;to:0.30 0.24 0.04;dur:5800;easing:easeInOutSine;loop:true;dir:alternate">
-        <a-sphere position="0 0 0"          radius="0.026" color="#FFFFFF" emissive="#FFFFFF" emissive-intensity="0.35" metalness="0" roughness="1" opacity="0.48"></a-sphere>
-        <a-sphere position="0.024 0.008 0"  radius="0.020" color="#FFFFFF" emissive="#FFFFFF" emissive-intensity="0.35" metalness="0" roughness="1" opacity="0.42"></a-sphere>
+      <!-- ==============================
+           💛 YU 魔法陣光環
+      ============================== -->
+      <a-entity id="yu-glow" position="0.04 -0.02 0.05"
+        animation="property: position; from: 0.04 -0.02 0.05; to: 0.04 0.0 0.05; dur: 2800; easing: easeInOutSine; loop: true; dir: alternate">
+        <a-sphere position=" 0.040  0 0"      radius="0.010" color="#FFD700" emissive="#FF8C00" emissive-intensity="0.8" metalness="0" roughness="1"
+          animation="property: scale; from: 0.6 0.6 0.6; to: 1 1 1; dur: 900; easing: easeInOutSine; loop: true; dir: alternate"></a-sphere>
+        <a-sphere position="-0.040  0 0"      radius="0.010" color="#FFD700" emissive="#FF8C00" emissive-intensity="0.8" metalness="0" roughness="1"
+          animation="property: scale; from: 0.6 0.6 0.6; to: 1 1 1; dur: 1100; easing: easeInOutSine; loop: true; dir: alternate; delay: 150"></a-sphere>
+        <a-sphere position=" 0.020  0  0.035" radius="0.009" color="#FFA500" emissive="#FF8C00" emissive-intensity="0.8" metalness="0" roughness="1"
+          animation="property: scale; from: 0.6 0.6 0.6; to: 1 1 1; dur: 950; easing: easeInOutSine; loop: true; dir: alternate; delay: 300"></a-sphere>
+        <a-sphere position="-0.020  0  0.035" radius="0.009" color="#FFA500" emissive="#FF8C00" emissive-intensity="0.8" metalness="0" roughness="1"
+          animation="property: scale; from: 0.6 0.6 0.6; to: 1 1 1; dur: 1050; easing: easeInOutSine; loop: true; dir: alternate; delay: 450"></a-sphere>
+        <a-sphere position=" 0.020  0 -0.035" radius="0.009" color="#FFD700" emissive="#FF8C00" emissive-intensity="0.8" metalness="0" roughness="1"
+          animation="property: scale; from: 0.6 0.6 0.6; to: 1 1 1; dur: 850; easing: easeInOutSine; loop: true; dir: alternate; delay: 200"></a-sphere>
+        <a-sphere position="-0.020  0 -0.035" radius="0.009" color="#FFD700" emissive="#FF8C00" emissive-intensity="0.8" metalness="0" roughness="1"
+          animation="property: scale; from: 0.6 0.6 0.6; to: 1 1 1; dur: 1200; easing: easeInOutSine; loop: true; dir: alternate; delay: 600"></a-sphere>
       </a-entity>
 
+      <!-- ==============================
+           ✨ 光點粒子容器
+      ============================== -->
       <a-entity id="sparkles-container"></a-entity>
-      <a-entity id="yu-particles"></a-entity>
 
-    </a-entity>
+      <!-- 環境光（書頁上方） -->
+      <a-light type="point" color="#FFE8B0" intensity="0.8" position="0 0.2 0.3" distance="2" decay="2"></a-light>
+
+    </xrextras-named-image-target>
+
   </a-scene>
 
   <script>
-    // ============================================================
-    //  drag-system：通用拖曳管理器，掛在 <a-scene> 上
-    //
-    //  使用方式：在任何 <a-entity> 加上：
-    //    class="draggable"
-    //    data-float-amp="0.03"   (浮動幅度，AR 單位)
-    //    data-float-dur="2200"   (浮動週期，毫秒)
-    //  → 該元素就自動可以拖曳，放開後恢復漂浮動畫
-    // ============================================================
-    AFRAME.registerComponent('drag-system', {
+    // 光點粒子生成
+    AFRAME.registerComponent('spawn-sparkles', {
       init: function () {
-        const scene    = this.el;
-        const SENS     = 0.004;   // 每像素對應的 AR 單位（可調）
-        const HIT_PX   = 115;     // 點擊偵測半徑（螢幕像素）
+        const container = document.getElementById('sparkles-container');
+        const colors = ['#B0E0FF', '#D0F0FF', '#FFEEDD', '#FFD6FF', '#C0FFE0', '#FFFACD'];
 
-        let active     = null;    // 目前被拖曳的元素
-        let startTX, startTY;
-        let startPX, startPY, startPZ;
+        for (let i = 0; i < 28; i++) {
+          const el = document.createElement('a-sphere');
+          const x = (Math.random() - 0.5) * 0.90;
+          const y = (Math.random() - 0.5) * 0.80;
+          const z = 0.02 + Math.random() * 0.09;
+          const r = 0.006 + Math.random() * 0.010;
+          const dur = 700 + Math.random() * 1800;
+          const delay = Math.random() * 2500;
+          const fromScale = (0.2 + Math.random() * 0.4).toFixed(2);
+          const color = colors[Math.floor(Math.random() * colors.length)];
 
-        // ── 取得元素的螢幕座標 ──────────────────────────────
-        const toScreen = (el) => {
-          const v = new THREE.Vector3();
-          el.object3D.getWorldPosition(v);
-          v.project(scene.camera);
-          return {
-            x: (v.x + 1) / 2 * scene.canvas.clientWidth,
-            y: (-v.y + 1) / 2 * scene.canvas.clientHeight
-          };
-        };
+          el.setAttribute('position', `${x.toFixed(3)} ${y.toFixed(3)} ${z.toFixed(3)}`);
+          el.setAttribute('radius', r.toFixed(4));
+          el.setAttribute('color', color);
+          el.setAttribute('emissive', color);
+          el.setAttribute('emissive-intensity', '0.8');
+          el.setAttribute('metalness', '0');
+          el.setAttribute('roughness', '1');
+          el.setAttribute('animation', `property: scale; from: ${fromScale} ${fromScale} ${fromScale}; to: 1 1 1; dur: ${Math.round(dur)}; delay: ${Math.round(delay)}; easing: easeInOutSine; loop: true; dir: alternate`);
 
-        // ── 停止浮動動畫 ─────────────────────────────────────
-        const pause = (el) => {
-          el.removeAttribute('animation__float');
-          // 小放大給「抓住」的觸感回饋
-          el.setAttribute('animation__grab', {
-            property:'scale', from:'1 1 1', to:'1.06 1.06 1.06',
-            dur:180, easing:'easeOutQuad'
-          });
-        };
-
-        // ── 放開後重新啟動漂浮，以當前位置為基準 ─────────────
-        const resume = (el) => {
-          el.removeAttribute('animation__grab');
-          const p   = el.getAttribute('position');
-          const amp = parseFloat(el.dataset.floatAmp || 0.025);
-          const dur = parseInt(el.dataset.floatDur   || 2500);
-          el.setAttribute('animation__float', {
-            property: 'position',
-            from: `${p.x} ${p.y} ${p.z}`,
-            to:   `${p.x} ${p.y + amp} ${p.z}`,
-            dur, easing:'easeInOutSine', loop:true, dir:'alternate'
-          });
-        };
-
-        // ── touchstart：找最近的 draggable ──────────────────
-        scene.canvas.addEventListener('touchstart', (e) => {
-          const t = e.touches[0];
-          let best = null, bestD = HIT_PX;
-
-          document.querySelectorAll('.draggable').forEach(el => {
-            const sp = toScreen(el);
-            const d  = Math.hypot(t.clientX - sp.x, t.clientY - sp.y);
-            if (d < bestD) { bestD = d; best = el; }
-          });
-
-          if (!best) return;
-          active = best;
-          startTX = t.clientX; startTY = t.clientY;
-          const p = active.getAttribute('position');
-          startPX = p.x; startPY = p.y; startPZ = p.z;
-          pause(active);
-          e.preventDefault();
-        }, { passive:false });
-
-        // ── touchmove：移動 active 元素 ─────────────────────
-        scene.canvas.addEventListener('touchmove', (e) => {
-          if (!active) return;
-          const t = e.touches[0];
-          active.setAttribute('position', {
-            x: startPX + (t.clientX - startTX) * SENS,
-            y: startPY - (t.clientY - startTY) * SENS,
-            z: startPZ
-          });
-          e.preventDefault();
-        }, { passive:false });
-
-        // ── touchend / cancel：放開 ──────────────────────────
-        const onEnd = () => { if (active) { resume(active); active = null; } };
-        scene.canvas.addEventListener('touchend',    onEnd);
-        scene.canvas.addEventListener('touchcancel', onEnd);
-      }
-    });
-
-    // ── 粒子生成 ─────────────────────────────────────────────
-    AFRAME.registerComponent('spawn-effects', {
-      init: function () {
-        const yuP = document.getElementById('yu-particles');
-        for (let i = 0; i < 14; i++) {
-          const el  = document.createElement('a-sphere');
-          const ang = (i/14)*Math.PI*2;
-          const rx  = Math.cos(ang)*(0.05+Math.random()*0.025);
-          const rz  = Math.sin(ang)*(0.05+Math.random()*0.025)*0.4;
-          const fy  = -0.22, ty = fy+0.18+Math.random()*0.18;
-          const dur = 1100+i*160, delay = i*90;
-          el.setAttribute('position',`${(0.03+rx).toFixed(3)} ${fy} ${(0.012+rz).toFixed(3)}`);
-          el.setAttribute('radius',(0.005+Math.random()*0.005).toFixed(4));
-          el.setAttribute('color','#FFD700'); el.setAttribute('emissive','#FFD700');
-          el.setAttribute('emissive-intensity','1'); el.setAttribute('metalness','0'); el.setAttribute('roughness','1');
-          el.setAttribute('animation__rise',`property:position;from:${(0.03+rx).toFixed(3)} ${fy} ${(0.012+rz).toFixed(3)};to:${(0.03+rx*0.4).toFixed(3)} ${ty.toFixed(3)} ${(0.012+rz*0.3).toFixed(3)};dur:${dur};delay:${delay};easing:easeOutQuad;loop:true`);
-          el.setAttribute('animation__fade',`property:scale;from:1 1 1;to:0.05 0.05 0.05;dur:${dur};delay:${delay};easing:easeInQuad;loop:true`);
-          yuP.appendChild(el);
-        }
-        const sc = document.getElementById('sparkles-container');
-        const colors = ['#FFE566','#FFFFFF','#B8E0FF','#FFD6FF','#C0FFE8'];
-        for (let i = 0; i < 14; i++) {
-          const el  = document.createElement('a-sphere');
-          const x   = (Math.random()-0.5)*0.86, y=(Math.random()-0.5)*0.76, z=0.03+Math.random()*0.06;
-          const r   = 0.006+Math.random()*0.007, dur=900+Math.random()*1400, delay=Math.random()*3500;
-          const col = colors[Math.floor(Math.random()*colors.length)], fs=(0.2+Math.random()*0.4).toFixed(2);
-          el.setAttribute('position',`${x.toFixed(3)} ${y.toFixed(3)} ${z.toFixed(3)}`);
-          el.setAttribute('radius',r.toFixed(4));
-          el.setAttribute('color',col); el.setAttribute('emissive',col);
-          el.setAttribute('emissive-intensity','1'); el.setAttribute('metalness','0'); el.setAttribute('roughness','1');
-          el.setAttribute('animation',`property:scale;from:${fs} ${fs} ${fs};to:1 1 1;dur:${Math.round(dur)};delay:${Math.round(delay)};easing:easeInOutSine;loop:true;dir:alternate`);
-          sc.appendChild(el);
-        }
-
-        // 啟動每個 draggable 的初始漂浮動畫
-        document.querySelectorAll('.draggable').forEach(el => {
-          const p   = el.getAttribute('position');
-          const amp = parseFloat(el.dataset.floatAmp || 0.025);
-          const dur = parseInt(el.dataset.floatDur   || 2500);
-          el.setAttribute('animation__float', {
-            property:'position',
-            from:`${p.x} ${p.y} ${p.z}`,
-            to:`${p.x} ${p.y+amp} ${p.z}`,
-            dur, easing:'easeInOutSine', loop:true, dir:'alternate'
-          });
-        });
-
-        // ── 讀取 Setup 頁面圈選的自訂元素 ──────────────────
-        const savedElements = localStorage.getItem('litiar_elements');
-        if (savedElements) {
-          try {
-            const customEls = JSON.parse(savedElements);
-            const anchor = document.getElementById('book-anchor');
-            const durations = [2000, 2400, 2800, 3200, 2600];
-
-            customEls.forEach((el, i) => {
-              // 建立 blob URL（a-image 無法直接接受 data URL，需要繞過）
-              const blob = dataURLtoBlob(el.dataURL);
-              const url  = URL.createObjectURL(blob);
-
-              const wrapper = document.createElement('a-entity');
-              wrapper.classList.add('draggable');
-              wrapper.dataset.floatAmp = '0.028';
-              wrapper.dataset.floatDur = durations[i % durations.length];
-              wrapper.setAttribute('position', `${el.arX.toFixed(3)} ${el.arY.toFixed(3)} 0.04`);
-
-              const img = document.createElement('a-image');
-              img.setAttribute('src', url);
-              img.setAttribute('width',  el.arW.toFixed(3));
-              img.setAttribute('height', el.arH.toFixed(3));
-              img.setAttribute('material', 'transparent:true;alphaTest:0.15;side:double');
-
-              wrapper.appendChild(img);
-              anchor.appendChild(wrapper);
-
-              // 啟動浮動動畫
-              const dur = durations[i % durations.length];
-              wrapper.setAttribute('animation__float', {
-                property:'position',
-                from:`${el.arX.toFixed(3)} ${el.arY.toFixed(3)} 0.04`,
-                to:`${el.arX.toFixed(3)} ${(el.arY + 0.028).toFixed(3)} 0.04`,
-                dur, easing:'easeInOutSine', loop:true, dir:'alternate'
-              });
-            });
-
-            console.log(`✅ 載入 ${customEls.length} 個自訂浮動元素`);
-          } catch(e) { console.warn('讀取自訂元素失敗', e); }
+          container.appendChild(el);
         }
       }
     });
 
-    // base64 dataURL → Blob
-    function dataURLtoBlob(dataURL) {
-      const [header, data] = dataURL.split(',');
-      const mime = header.match(/:(.*?);/)[1];
-      const binary = atob(data);
-      const arr = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) arr[i] = binary.charCodeAt(i);
-      return new Blob([arr], { type: mime });
-    }
+    document.querySelector('a-scene').setAttribute('spawn-sparkles', '');
 
-    document.querySelector('a-scene').setAttribute('spawn-effects','');
-
-    const hint   = document.getElementById('hint');
-    const dHint  = document.getElementById('drag-hint');
+    // UI 回饋：偵測到書頁
+    const hint  = document.getElementById('hint');
+    const flash = document.getElementById('detected-flash');
     const anchor = document.getElementById('book-anchor');
-    anchor.addEventListener('targetFound', () => {
+
+    anchor.addEventListener('xrimagefound', () => {
       hint.classList.add('hidden');
-      dHint.classList.add('show');
-      readBtn.classList.add('visible');
-      setTimeout(() => dHint.classList.remove('show'), 3000);
+      flash.classList.add('show');
+      setTimeout(() => flash.classList.remove('show'), 800);
     });
-    anchor.addEventListener('targetLost', () => {
+
+    anchor.addEventListener('xrimagelost', () => {
       hint.classList.remove('hidden');
     });
-
-    // ============================================================
-    //  🔊 閱讀功能 — Web Speech API
-    //  逐句朗讀並顯示字幕
-    // ============================================================
-    const readBtn  = document.getElementById('read-btn');
-    const btnIcon  = document.getElementById('btn-icon');
-    const btnLabel = document.getElementById('btn-label');
-    const subtitle = document.getElementById('subtitle');
-
-    // 本頁英文內容（按照書頁順序）
-    const sentences = [
-      { text: "The Wonder Adventures of Yu.",                                label: "The Wonder Adventures of Yu." },
-      { text: "Welcome to Yu's World.",                                       label: "Welcome to Yu's World." },
-      { text: "Chapter One. The Town of Floating Stars.",                     label: "Chapter 1 · The Town of Floating Stars" },
-      { text: "Yu lives in a town where stars float gently in the sky.",      label: "Yu lives in a town where stars float gently in the sky." },
-      { text: "She loves to wander and discover new things.",                 label: "She loves to wander and discover new things." },
-      { text: "When the stars whisper at night, a little adventure begins.",  label: "When the stars whisper at night, a little adventure begins." },
-      { text: "One tiny step leads to a big dream.",                          label: "One tiny step leads to a big dream." },
-      { text: "Let's go, Yu! The world is waiting just for you.",             label: "Let's go, Yu! The world is waiting just for you." },
-    ];
-
-    let isReading  = false;
-    let currentIdx = 0;
-
-    const showSubtitle = (text) => { subtitle.textContent = text; subtitle.classList.add('show'); };
-    const hideSubtitle = () => subtitle.classList.remove('show');
-
-    const setReadingState = (reading) => {
-      isReading = reading;
-      if (reading) {
-        readBtn.classList.add('reading');
-        btnIcon.innerHTML = '<span class="sound-bars"><span></span><span></span><span></span><span></span><span></span></span>';
-        btnLabel.textContent = '停止';
-      } else {
-        readBtn.classList.remove('reading');
-        btnIcon.textContent = '🔊';
-        btnLabel.textContent = '閱讀';
-        hideSubtitle();
-        currentIdx = 0;
-      }
-    };
-
-    const readNext = () => {
-      if (!isReading || currentIdx >= sentences.length) { setReadingState(false); return; }
-      const s   = sentences[currentIdx++];
-      const utt = new SpeechSynthesisUtterance(s.text);
-      utt.lang  = 'en-US';
-      utt.rate  = 0.82;
-      utt.pitch = 1.05;
-      const voices   = speechSynthesis.getVoices();
-      const enVoice  = voices.find(v => v.lang.startsWith('en-US') && /female|samantha|karen/i.test(v.name))
-                    || voices.find(v => v.lang.startsWith('en')) || null;
-      if (enVoice) utt.voice = enVoice;
-      showSubtitle(s.label);
-      utt.onend  = readNext;
-      utt.onerror = () => setReadingState(false);
-      speechSynthesis.speak(utt);
-    };
-
-    readBtn.addEventListener('click', () => {
-      if (isReading) {
-        speechSynthesis.cancel();
-        setReadingState(false);
-      } else {
-        speechSynthesis.cancel();
-        currentIdx = 0;
-        setReadingState(true);
-        setTimeout(readNext, 120); // iOS 需要短暫 delay
-      }
-    });
-
-    document.addEventListener('visibilitychange', () => {
-      if (document.hidden && isReading) { speechSynthesis.cancel(); setReadingState(false); }
-    });
   </script>
+
 </body>
 </html>
-
-
-
